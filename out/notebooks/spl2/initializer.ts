@@ -222,47 +222,50 @@ export class Spl2ClientServer {
                     if (lspLog.message.includes('started listening on port')) {
                         console.log('SPL2 Server is up, starting client...');
                         // Ready for client
-                        this.socket = new Socket();
-    
-                        this.socket.on('connect', () => {
-                            console.log('Client: connection established with server');
-                            const address:AddressInfo = this.socket.address() as AddressInfo;
-                            console.log(`Client is listening on port ${address.port}`);
-                            // Reset retries after a successful connection
-                            this.retries = 0;
-                            this.restarting = false;
-                            resolve({
-                                writer: this.socket,
-                                reader: this.socket,
-                                // detached: true,
-                            });
-                        });
-    
-                        this.socket.on('close', () => {
-                            if (this.restarting) {
-                                return;
-                            }
-                            this.restarting = true;
-                            console.warn('Connection lost, bumping port and retrying ...');
-                            this.onClose(this.lspPort + 1);
-                        });
-    
-                        this.socket.on('error', (err) => {
-                            if (isNodeError(err) && err.code === 'ECONNRESET') {
-                                // expected when server is killed
-                                console.log('Server connection ended.');
-                                return;
-                            }
-                            console.warn(`error between LSP client/server encountered -> ${err}`);
-                        });
-    
-                        this.socket.connect({
-                            port: this.lspPort,
-                        });
+                        this.startClient((info: StreamInfo) => resolve(info));
                     }
                 });
             });
         };
+    }
+
+    startClient(onConnected: (info: StreamInfo) => void): void {
+        this.socket = new Socket();
+    
+        this.socket.on('connect', () => {
+            console.log('Client: connection established with server');
+            const address:AddressInfo = this.socket.address() as AddressInfo;
+            console.log(`Client is listening on port ${address.port}`);
+            // Reset retries after a successful connection
+            this.retries = 0;
+            this.restarting = false;
+            onConnected({
+                writer: this.socket,
+                reader: this.socket,
+            });
+        });
+
+        this.socket.on('close', () => {
+            if (this.restarting) {
+                return;
+            }
+            this.restarting = true;
+            console.warn('Connection lost, bumping port and retrying ...');
+            this.onClose(this.lspPort + 1);
+        });
+
+        this.socket.on('error', (err) => {
+            if (isNodeError(err) && err.code === 'ECONNRESET') {
+                // expected when server is killed
+                console.log('Server connection ended.');
+                return;
+            }
+            console.warn(`error between LSP client/server encountered -> ${err}`);
+        });
+
+        this.socket.connect({
+            port: this.lspPort,
+        });
     }
 
     killServer(): void {
